@@ -37,4 +37,4 @@ while True:
     elapsed_s = time.ticks_diff(time.ticks_ms(), start_ms) / 1000
     print(elapsed_s, dist_cm)
     logger.log(time_s=elapsed_s, dist_cm=dist_cm)
-    time.sleep(1)
+    time.sleep(0.1)
