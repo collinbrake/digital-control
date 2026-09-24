@@ -46,10 +46,17 @@ def main():
 
     time_col = df.columns[0]
     fig, ax = plt.subplots()
+    ax2 = ax.twinx()
+    notfirst = False
     for col in df.columns[1:]:
-        ax.plot(df[time_col], df[col], label=col)
+        if notfirst:
+            ax2.plot(df[time_col], df[col], label=col, color="red")
+        else:
+            ax.plot(df[time_col], df[col], label=col, color="blue")
+        notfirst = True
     ax.set_xlabel(time_col)
     ax.legend()
+    ax2.legend()
 
     if saved_csv:
         png_dest = saved_csv.with_suffix(".png")
