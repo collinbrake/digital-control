@@ -1,28 +1,12 @@
 import time
-from machine import Pin, I2C
+from machine import Pin, I2C, Timer
+
+from csv_logger import CsvLogger
 
 
-class CsvLogger:
-    """Writes rows to a CSV file using named columns instead of positional values."""
-
-    def __init__(self, filename, columns):
-        self.columns = columns
-        self.file = open(filename, "w")
-        self.file.write(",".join(columns) + "\r\n")
-        self.file.flush()
-
-    def log(self, **values):
-        row = [str(values.get(col, "")) for col in self.columns]
-        self.file.write(",".join(row) + "\r\n")
-        self.file.flush()
-
-    def close(self):
-        self.file.close()
-
-
-# ---------------------------------------------------------
-# I2C setup
-# ---------------------------------------------------------
+# =========================================================
+# I2C
+# =========================================================
 
 i2c = I2C(
     1,
@@ -31,31 +15,69 @@ i2c = I2C(
     freq=100_000
 )
 
+
+# =========================================================
 # Distance sensor
+# =========================================================
+
 DIST_ADDR = 0x40
 REG_DIST = 0x5E
 
-# DT system
-DT_ADDR = 0x60
+
+# =========================================================
+# DAC
+# =========================================================
+
+DAC_ADDR = 0x60
+
+# Active-low latch
+latch_n = Pin(20, Pin.OUT, value=1)
 
 
-# ---------------------------------------------------------
-# DT system
-# ---------------------------------------------------------
+# Pre-allocated DAC message buffer.
+# This is important because the ISR should not create
+# a new bytearray every time it executes.
+dac_buf = bytearray(6)
+
+
+# =========================================================
+# Global val
+# =========================================================
 
 val = 0
 
 
-def DT_system(source):
+# =========================================================
+# Timer ISR
+# =========================================================
+
+def timer_isr(timer):
     global val
 
-    # Increment command
+    # -----------------------------------------------------
+    # Increment val
+    # -----------------------------------------------------
+
     val = val + 8
 
-    # Wrap val into the range -4096 to +4095
+    # -----------------------------------------------------
+    # Keep val bounded from -4096 to +4095
+    #
+    # Equivalent to:
+    #     val = ((val + 4096) % 8192) - 4096
+    # -----------------------------------------------------
+
     val = ((val + 4096) % 8192) - 4096
 
-    # Separate positive and negative portions
+
+    # -----------------------------------------------------
+    # Express:
+    #
+    #     val = vp - vn
+    #
+    # with vp >= 0 and vn >= 0
+    # -----------------------------------------------------
+
     if val > 0:
         vp = val
         vn = 0
@@ -63,47 +85,112 @@ def DT_system(source):
         vp = 0
         vn = -val
 
-    # Split positive value into high and low bytes
+
+    # -----------------------------------------------------
+    # Split vp into two 8-bit bytes
+    #
+    # hip = four MSBs of the 12-bit value
+    # lop = eight LSBs
+    # -----------------------------------------------------
+
     hip = int(vp / 256)
     lop = int(vp) % 256
 
-    # Split negative value magnitude into high and low bytes
+
+    # -----------------------------------------------------
+    # Split vn into two 8-bit bytes
+    # -----------------------------------------------------
+
     hin = int(vn / 256)
     lon = int(vn) % 256
 
-    # Construct I2C packet
-    buf = bytearray([
-        0x08,
-        hip,
-        lop,
-        0x00,
-        hin,
-        lon
-    ])
 
-    # Send packet to device at 0x60
-    i2c.writeto(DT_ADDR, buf, True)
+    # -----------------------------------------------------
+    # Create DAC message frame
+    #
+    # Byte 0: 0x08 -> VOUT1 write command
+    # Bytes 1-2: VOUT1 data
+    #
+    # Byte 3: 0x00 -> VOUT0 write command
+    # Bytes 4-5: VOUT0 data
+    # -----------------------------------------------------
+
+    dac_buf[0] = 0x08
+    dac_buf[1] = hip
+    dac_buf[2] = lop
+
+    dac_buf[3] = 0x00
+    dac_buf[4] = hin
+    dac_buf[5] = lon
 
 
-# ---------------------------------------------------------
-# Main program
-# ---------------------------------------------------------
+    # -----------------------------------------------------
+    # Send message to DAC
+    # -----------------------------------------------------
 
-print("I2C devices found:", [hex(addr) for addr in i2c.scan()])
+    i2c.writeto(DAC_ADDR, dac_buf, True)
+
+
+    # -----------------------------------------------------
+    # Assert and de-assert active-low latch
+    #
+    # LOW  -> latch asserted
+    # HIGH -> latch released
+    # -----------------------------------------------------
+
+    latch_n.value(0)
+    latch_n.value(1)
+
+
+# =========================================================
+# Check I2C devices
+# =========================================================
+
+print("I2C devices found:")
+
+for address in i2c.scan():
+    print(hex(address))
+
+
+# =========================================================
+# CSV logger
+# =========================================================
 
 logger = CsvLogger(
     "data.csv",
-    ["time_s", "dist_cm", "dac_i2c"]
+    [
+        "time_s",
+        "dist_cm",
+        "dac_i2c"
+    ]
 )
+
+
+# =========================================================
+# Start timer
+# =========================================================
+
+timer = Timer(-1)
+
+timer.init(
+    freq=10,
+    mode=Timer.PERIODIC,
+    callback=timer_isr
+)
+
+# =========================================================
+# Main loop
+# =========================================================
 
 start_ms = time.ticks_ms()
 
 try:
+
     while True:
 
-        # ---------------------------------------------
+        # -------------------------------------------------
         # Read distance sensor
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         raw = i2c.readfrom_mem(
             DIST_ADDR,
@@ -113,15 +200,10 @@ try:
 
         dist_cm = (raw[0] * 16 + raw[1]) / 64
 
-        # ---------------------------------------------
-        # Run DT system
-        # ---------------------------------------------
 
-        DT_system(dist_cm)
-
-        # ---------------------------------------------
+        # -------------------------------------------------
         # Calculate elapsed time
-        # ---------------------------------------------
+        # -------------------------------------------------
 
         elapsed_s = (
             time.ticks_diff(
@@ -130,18 +212,21 @@ try:
             ) / 1000
         )
 
-        # ---------------------------------------------
-        # Print/log results
-        # ---------------------------------------------
+
+        # -------------------------------------------------
+        # Print
+        # -------------------------------------------------
 
         print(
-            "time:",
             elapsed_s,
-            "dist:",
             dist_cm,
-            "val:",
             val
         )
+
+
+        # -------------------------------------------------
+        # Log
+        # -------------------------------------------------
 
         logger.log(
             time_s=elapsed_s,
@@ -151,8 +236,13 @@ try:
 
         time.sleep(0.1)
 
+
 except KeyboardInterrupt:
+
     print("Stopping...")
 
+
 finally:
+
+    timer.deinit()
     logger.close()

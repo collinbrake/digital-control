@@ -1,25 +1,6 @@
 import time
 from machine import Pin, I2C
-
-
-class CsvLogger:
-    """Writes rows to a CSV file using named columns instead of positional values."""
-
-    def __init__(self, filename, columns):
-        self.columns = columns
-        self.file = open(filename, "w")
-        self.file.write(",".join(columns) + "\r\n")
-        self.file.flush()
-
-    def log(self, **values):
-        # missing columns are written as empty fields so rows stay aligned
-        row = [str(values.get(col, "")) for col in self.columns]
-        self.file.write(",".join(row) + "\r\n")
-        self.file.flush()
-
-    def close(self):
-        self.file.close()
-
+from csv_logger import CsvLogger
 
 i2c = I2C(1, scl=Pin(19), sda=Pin(18), freq=100_000)
 
