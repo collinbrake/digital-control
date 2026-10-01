@@ -3,62 +3,35 @@ import math
 from machine import Pin, I2C, Timer
 
 # =========================================================
-# I2C
+# Timer ISR
 # =========================================================
 
-i2c = I2C(
-    1,
-    scl=Pin(19),
-    sda=Pin(18),
-    freq=1_00_000
-)
+def timer_isr(timer):
 
+    global dac_buf
+    global print_counter
+    global PRINT_EVERY 
 
-# =========================================================
-# Distance sensor
-# =========================================================
+    # -------------------------------------------------
+    # Read distance sensor
+    # -------------------------------------------------
 
-DIST_ADDR = 0x40
-REG_DIST = 0x5E
+    # raw = i2c.readfrom_mem(
+    #     DIST_ADDR,
+    #     REG_DIST,
+    #     2
+    # )
 
+    # dist_cm = (raw[0] * 16 + raw[1]) / 64  
+    dist_cm = 0
 
-# =========================================================
-# DAC
-# =========================================================
-
-DAC_ADDR = 0x60
-
-# Active-low latch
-latch_n = Pin(20, Pin.OUT, value=1)
-
-
-# Pre-allocated DAC message buffer.
-# This is important because the ISR should not create
-# a new bytearray every time it executes.
-dac_buf = bytearray(6)
-
-
-# =========================================================
-# Global val
-# =========================================================
-
-val = 0
-vp = 0          # positive DAC channel value, updated by main loop
-vn = 0          # negative DAC channel value, updated by main loop
-T = 1          # control period
-t = 0           # elapsed time since start of main loop
-omega2 = 0.1    # chirp function frequency squared
-A = 1600
-
-# =========================================================
-# CHIRP function (runs in main loop, not the ISR, since
-# math.cos()/** on RP2040 has no hardware FPU and is too
-# slow to fit inside a 1 kHz hard-IRQ period)
-# =========================================================
-
-def update_chirp(t):
-    global val, vp, vn
-
+    t = (
+        time.ticks_diff(
+            time.ticks_ms(),
+            start_ms
+        ) / 1000
+    )
+           
     val = A*math.cos(omega2*(t**2))
 
     if val > 0:
@@ -67,15 +40,6 @@ def update_chirp(t):
     else:
         vp = 0
         vn = -val
-
-
-# =========================================================
-# Timer ISR
-# =========================================================
-
-def timer_isr(timer):
-    global vp
-    global vn
 
     # -----------------------------------------------------
     # Split vp into two 8-bit bytes
@@ -87,14 +51,12 @@ def timer_isr(timer):
     hip = int(vp / 256)
     lop = int(vp) % 256
 
-
     # -----------------------------------------------------
     # Split vn into two 8-bit bytes
     # -----------------------------------------------------
 
     hin = int(vn / 256)
     lon = int(vn) % 256
-
 
     # -----------------------------------------------------
     # Create DAC message frame
@@ -114,13 +76,11 @@ def timer_isr(timer):
     dac_buf[4] = hin
     dac_buf[5] = lon
 
-
     # -----------------------------------------------------
     # Send message to DAC
     # -----------------------------------------------------
 
     i2c.writeto(DAC_ADDR, dac_buf, True)
-
 
     # -----------------------------------------------------
     # Assert and de-assert active-low latch
@@ -132,6 +92,74 @@ def timer_isr(timer):
     latch_n.value(0)
     latch_n.value(1)
 
+    # -------------------------------------------------
+    # Print (throttled; USB-serial print on every
+    # iteration blocks the loop far longer than 1 ms)
+    # -------------------------------------------------
+
+    print_counter += 1
+    if print_counter >= PRINT_EVERY:
+        print_counter = 0
+        print(
+            t,
+            dist_cm,
+            val
+        )
+
+# =========================================================
+# I2C
+# =========================================================
+
+i2c = I2C(
+    1,
+    scl=Pin(19),
+    sda=Pin(18),
+    freq=1_00_000
+)
+
+# =========================================================
+# Distance sensor
+# =========================================================
+
+DIST_ADDR = 0x40
+REG_DIST = 0x5E
+
+# =========================================================
+# DAC
+# =========================================================
+
+DAC_ADDR = 0x60
+
+# Active-low latch
+latch_n = Pin(20, Pin.OUT, value=1)
+
+# Pre-allocated DAC message buffer.
+# This is important because the ISR should not create
+# a new bytearray every time it executes.
+dac_buf = bytearray(6)
+
+# =========================================================
+# Global val
+# =========================================================
+
+val = 0
+vp = 0          # positive DAC channel value, updated by main loop
+vn = 0          # negative DAC channel value, updated by main loop
+T = 1          # control period
+t = 0           # elapsed time since start of main loop
+omega2 = 0.1    # chirp function frequency squared
+A = 1600
+print_counter = 0
+PRINT_EVERY = 20
+
+start_ms = time.ticks_ms()
+
+# =========================================================
+# CSV logging
+# =========================================================
+
+file = open("data.csv", "w")
+file.write("k,dist_cm,dac_i2c\r\n")
 
 # =========================================================
 # Check I2C devices
@@ -141,14 +169,6 @@ print("I2C devices found:")
 
 for address in i2c.scan():
     print(hex(address))
-
-
-# =========================================================
-# CSV logging
-# =========================================================
-
-file = open("data.csv", "w")
-file.write("k,dist_cm,dac_i2c\r\n")
 
 # =========================================================
 # Start timer
@@ -162,78 +182,5 @@ timer.init(
     callback=timer_isr
 )
 
-# =========================================================
-# Main loop
-# =========================================================
-
-PRINT_EVERY = 20
-print_counter = 0
-
-start_ms = time.ticks_ms()
-
-try:
-
-    while True:
-
-        # -------------------------------------------------
-        # Read distance sensor
-        # -------------------------------------------------
-
-        # raw = i2c.readfrom_mem(
-        #     DIST_ADDR,
-        #     REG_DIST,
-        #     2
-        # )
-
-        # dist_cm = (raw[0] * 16 + raw[1]) / 64
-        dist_cm = 0
-
-
-        # -------------------------------------------------
-        # Calculate elapsed time
-        # -------------------------------------------------
-
-        t = (
-            time.ticks_diff(
-                time.ticks_ms(),
-                start_ms
-            ) / 1000
-        )
-
-        update_chirp(t)
-
-
-        # -------------------------------------------------
-        # Print (throttled; USB-serial print on every
-        # iteration blocks the loop far longer than 1 ms)
-        # -------------------------------------------------
-
-        print_counter += 1
-        if print_counter >= PRINT_EVERY:
-            print_counter = 0
-            print(
-                t,
-                dist_cm,
-                val
-            )
-
-
-        # -------------------------------------------------
-        # Log
-        # -------------------------------------------------
-
-        # logger.log(
-        #     time_s=t,
-        #     dist_cm=dist_cm,
-        #     dac_i2c=val
-        # )
-
-except KeyboardInterrupt:
-
-    print("Stopping...")
-
-
-finally:
-
-    timer.deinit()
-    logger.close()
+while True:
+    pass
