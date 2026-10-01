@@ -3,6 +3,50 @@ import math
 from machine import Pin, I2C, Timer
 
 # =========================================================
+# I2C
+# =========================================================
+
+i2c = I2C(
+    1,
+    scl=Pin(19),
+    sda=Pin(18),
+    freq=400_000
+)
+
+# =========================================================
+# Distance sensor
+# =========================================================
+
+DIST_ADDR = 0x40
+REG_DIST = 0x5E
+
+# =========================================================
+# DAC
+# =========================================================
+
+DAC_ADDR = 0x60
+
+# Active-low latch
+latch_n = Pin(20, Pin.OUT, value=1)
+
+# Pre-allocated DAC message buffer.
+# This is important because the ISR should not create
+# a new bytearray every time it executes.
+dac_buf = bytearray(6)
+
+# =========================================================
+# Global val
+# =========================================================
+
+val = 0
+T = 1          # control period (ms)
+k = 0           # sample count
+omega2 = 2*(T/1000)**2    # chirp function frequency squared
+A = 1500
+dist_cm = 0
+i2c_error_count = 0
+
+# =========================================================
 # Timer ISR
 # =========================================================
 
@@ -19,7 +63,6 @@ def timer_isr(timer):
 def _timer_isr_body(timer):
 
     global dac_buf
-    global t
     global k
     global val 
     global dist_cm
@@ -42,14 +85,11 @@ def _timer_isr_body(timer):
     except OSError:
         pass
 
-    t = (
-        time.ticks_diff(
-            time.ticks_ms(),
-            start_ms
-        ) / 1000
-    )
-           
-    val = A*math.cos(omega2*(t**2))
+    # k must advance once per tick regardless of I2C outcome,
+    # since it stands in for real elapsed time in the chirp below
+    k += 1
+
+    val = A*math.cos(omega2*(k**2))
 
     if val > 0:
         vp = val
@@ -119,59 +159,7 @@ def _timer_isr_body(timer):
     latch_n.value(1)
 
     file.write(str(k) + "," + str(dist_cm) + "," + str(val) + "\r\n")
-
-    k += 1
     
-
-# =========================================================
-# I2C
-# =========================================================
-
-i2c = I2C(
-    1,
-    scl=Pin(19),
-    sda=Pin(18),
-    freq=400_000
-)
-
-# =========================================================
-# Distance sensor
-# =========================================================
-
-DIST_ADDR = 0x40
-REG_DIST = 0x5E
-
-# =========================================================
-# DAC
-# =========================================================
-
-DAC_ADDR = 0x60
-
-# Active-low latch
-latch_n = Pin(20, Pin.OUT, value=1)
-
-# Pre-allocated DAC message buffer.
-# This is important because the ISR should not create
-# a new bytearray every time it executes.
-dac_buf = bytearray(6)
-
-# =========================================================
-# Global val
-# =========================================================
-
-val = 0
-vp = 0          # positive DAC channel value, updated by main loop
-vn = 0          # negative DAC channel value, updated by main loop
-T = 1          # control period
-t = 0           # elapsed time since start of main loop
-k = 0           # sample count
-omega2 = 0.1    # chirp function frequency squared
-A = 1600
-dist_cm = 0
-i2c_error_count = 0
-
-start_ms = time.ticks_ms()
-
 # =========================================================
 # CSV logging
 # =========================================================
@@ -209,7 +197,7 @@ try:
         # -------------------------------------------------
 
         print(
-            t,
+            k,
             dist_cm,
             val
         )
