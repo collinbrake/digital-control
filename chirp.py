@@ -1,4 +1,5 @@
 import time
+import math
 from machine import Pin, I2C, Timer
 
 from csv_logger import CsvLogger
@@ -12,7 +13,7 @@ i2c = I2C(
     1,
     scl=Pin(19),
     sda=Pin(18),
-    freq=100_000
+    freq=1_00_000
 )
 
 
@@ -45,46 +46,23 @@ dac_buf = bytearray(6)
 # =========================================================
 
 val = 0
-state = 0
-
+vp = 0          # positive DAC channel value, updated by main loop
+vn = 0          # negative DAC channel value, updated by main loop
+T = 1          # control period
+t = 0           # elapsed time since start of main loop
+omega2 = 0.1    # chirp function frequency squared
+A = 2000
 
 # =========================================================
-# Timer ISR
+# CHIRP function (runs in main loop, not the ISR, since
+# math.cos()/** on RP2040 has no hardware FPU and is too
+# slow to fit inside a 1 kHz hard-IRQ period)
 # =========================================================
 
-def timer_isr(timer):
-    global val
-    global state
+def update_chirp(t):
+    global val, vp, vn
 
-    # -----------------------------------------------------
-    # Increment val
-    # -----------------------------------------------------
-
-    if state == 0:
-        val = val + 60
-    else:
-        val -= 60
-
-    # -----------------------------------------------------
-    # Keep val bounded from -4096 to +4095
-    #
-    # Equivalent to:
-    #     val = ((val + 4096) % 8192) - 4096
-    # -----------------------------------------------------
-
-    if val >= 4000:
-        state = 1
-    elif val <= -4000:
-        state = 0
-
-
-    # -----------------------------------------------------
-    # Express:
-    #
-    #     val = vp - vn
-    #
-    # with vp >= 0 and vn >= 0
-    # -----------------------------------------------------
+    val = A*math.cos(omega2*(t**2))
 
     if val > 0:
         vp = val
@@ -93,6 +71,14 @@ def timer_isr(timer):
         vp = 0
         vn = -val
 
+
+# =========================================================
+# Timer ISR
+# =========================================================
+
+def timer_isr(timer):
+    global vp
+    global vn
 
     # -----------------------------------------------------
     # Split vp into two 8-bit bytes
@@ -181,7 +167,7 @@ logger = CsvLogger(
 timer = Timer(-1)
 
 timer.init(
-    freq=10,
+    freq=1000/T,
     mode=Timer.PERIODIC,
     callback=timer_isr
 )
@@ -200,25 +186,28 @@ try:
         # Read distance sensor
         # -------------------------------------------------
 
-        raw = i2c.readfrom_mem(
-            DIST_ADDR,
-            REG_DIST,
-            2
-        )
+        # raw = i2c.readfrom_mem(
+        #     DIST_ADDR,
+        #     REG_DIST,
+        #     2
+        # )
 
-        dist_cm = (raw[0] * 16 + raw[1]) / 64
+        # dist_cm = (raw[0] * 16 + raw[1]) / 64
+        dist_cm = 0
 
 
         # -------------------------------------------------
         # Calculate elapsed time
         # -------------------------------------------------
 
-        elapsed_s = (
+        t = (
             time.ticks_diff(
                 time.ticks_ms(),
                 start_ms
             ) / 1000
         )
+
+        update_chirp(t)
 
 
         # -------------------------------------------------
@@ -226,7 +215,7 @@ try:
         # -------------------------------------------------
 
         print(
-            elapsed_s,
+            t,
             dist_cm,
             val
         )
@@ -237,13 +226,10 @@ try:
         # -------------------------------------------------
 
         logger.log(
-            time_s=elapsed_s,
+            time_s=t,
             dist_cm=dist_cm,
             dac_i2c=val
         )
-
-        time.sleep(0.1)
-
 
 except KeyboardInterrupt:
 
