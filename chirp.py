@@ -9,8 +9,8 @@ from machine import Pin, I2C, Timer
 def timer_isr(timer):
 
     global dac_buf
-    global print_counter
-    global PRINT_EVERY 
+    global val 
+    global dist_cm
 
     # -------------------------------------------------
     # Read distance sensor
@@ -23,7 +23,6 @@ def timer_isr(timer):
     # )
 
     # dist_cm = (raw[0] * 16 + raw[1]) / 64  
-    dist_cm = 0
 
     t = (
         time.ticks_diff(
@@ -92,19 +91,7 @@ def timer_isr(timer):
     latch_n.value(0)
     latch_n.value(1)
 
-    # -------------------------------------------------
-    # Print (throttled; USB-serial print on every
-    # iteration blocks the loop far longer than 1 ms)
-    # -------------------------------------------------
-
-    print_counter += 1
-    if print_counter >= PRINT_EVERY:
-        print_counter = 0
-        print(
-            t,
-            dist_cm,
-            val
-        )
+    
 
 # =========================================================
 # I2C
@@ -149,8 +136,7 @@ T = 1          # control period
 t = 0           # elapsed time since start of main loop
 omega2 = 0.1    # chirp function frequency squared
 A = 1600
-print_counter = 0
-PRINT_EVERY = 20
+dist_cm = 0
 
 start_ms = time.ticks_ms()
 
@@ -183,4 +169,15 @@ timer.init(
 )
 
 while True:
-    pass
+    # -------------------------------------------------
+    # Print (throttled; USB-serial print on every
+    # iteration blocks the loop far longer than 1 ms)
+    # -------------------------------------------------
+
+    print(
+        t,
+        dist_cm,
+        val
+    )
+
+    time.sleep(0.1)
