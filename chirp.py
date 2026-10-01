@@ -7,22 +7,40 @@ from machine import Pin, I2C, Timer
 # =========================================================
 
 def timer_isr(timer):
+    # Ctrl-C can land inside this hard-IRQ (it fires 1000x/s)
+    # instead of the main loop; catch it here so it stops the
+    # timer cleanly instead of repeating every tick forever.
+    try:
+        _timer_isr_body(timer)
+    except KeyboardInterrupt:
+        timer.deinit()
+
+
+def _timer_isr_body(timer):
 
     global dac_buf
+    global t
+    global k
     global val 
     global dist_cm
 
     # -------------------------------------------------
     # Read distance sensor
+    #
+    # On failure, keep the last known dist_cm; a truly
+    # stuck bus will also fail the DAC write below, which
+    # is what trips the error counter and stops the timer.
     # -------------------------------------------------
 
-    # raw = i2c.readfrom_mem(
-    #     DIST_ADDR,
-    #     REG_DIST,
-    #     2
-    # )
-
-    # dist_cm = (raw[0] * 16 + raw[1]) / 64  
+    try:
+        raw = i2c.readfrom_mem(
+            DIST_ADDR,
+            REG_DIST,
+            2
+        )
+        dist_cm = (raw[0] * 16 + raw[1]) / 64
+    except OSError:
+        pass
 
     t = (
         time.ticks_diff(
@@ -79,7 +97,16 @@ def timer_isr(timer):
     # Send message to DAC
     # -----------------------------------------------------
 
-    i2c.writeto(DAC_ADDR, dac_buf, True)
+    global i2c_error_count
+
+    try:
+        i2c.writeto(DAC_ADDR, dac_buf, True)
+        i2c_error_count = 0
+    except OSError:
+        i2c_error_count += 1
+        if i2c_error_count >= 10:
+            timer.deinit()
+        return
 
     # -----------------------------------------------------
     # Assert and de-assert active-low latch
@@ -91,6 +118,9 @@ def timer_isr(timer):
     latch_n.value(0)
     latch_n.value(1)
 
+    file.write(str(k) + "," + str(dist_cm) + "," + str(val) + "\r\n")
+
+    k += 1
     
 
 # =========================================================
@@ -101,7 +131,7 @@ i2c = I2C(
     1,
     scl=Pin(19),
     sda=Pin(18),
-    freq=1_00_000
+    freq=400_000
 )
 
 # =========================================================
@@ -134,9 +164,11 @@ vp = 0          # positive DAC channel value, updated by main loop
 vn = 0          # negative DAC channel value, updated by main loop
 T = 1          # control period
 t = 0           # elapsed time since start of main loop
+k = 0           # sample count
 omega2 = 0.1    # chirp function frequency squared
 A = 1600
 dist_cm = 0
+i2c_error_count = 0
 
 start_ms = time.ticks_ms()
 
@@ -168,16 +200,27 @@ timer.init(
     callback=timer_isr
 )
 
-while True:
-    # -------------------------------------------------
-    # Print (throttled; USB-serial print on every
-    # iteration blocks the loop far longer than 1 ms)
-    # -------------------------------------------------
+try:
 
-    print(
-        t,
-        dist_cm,
-        val
-    )
+    while True:
+        # -------------------------------------------------
+        # Print (throttled; USB-serial print on every
+        # iteration blocks the loop far longer than 1 ms)
+        # -------------------------------------------------
 
-    time.sleep(0.1)
+        print(
+            t,
+            dist_cm,
+            val
+        )
+
+        time.sleep(1)
+
+except KeyboardInterrupt:
+
+    print("Stopping...")
+
+finally:
+
+    timer.deinit()
+    file.close()
