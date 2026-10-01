@@ -2,9 +2,6 @@ import time
 import math
 from machine import Pin, I2C, Timer
 
-from csv_logger import CsvLogger
-
-
 # =========================================================
 # I2C
 # =========================================================
@@ -51,7 +48,7 @@ vn = 0          # negative DAC channel value, updated by main loop
 T = 1          # control period
 t = 0           # elapsed time since start of main loop
 omega2 = 0.1    # chirp function frequency squared
-A = 2000
+A = 1600
 
 # =========================================================
 # CHIRP function (runs in main loop, not the ISR, since
@@ -147,18 +144,11 @@ for address in i2c.scan():
 
 
 # =========================================================
-# CSV logger
+# CSV logging
 # =========================================================
 
-logger = CsvLogger(
-    "data.csv",
-    [
-        "time_s",
-        "dist_cm",
-        "dac_i2c"
-    ]
-)
-
+file = open("data.csv", "w")
+file.write("k,dist_cm,dac_i2c\r\n")
 
 # =========================================================
 # Start timer
@@ -175,6 +165,9 @@ timer.init(
 # =========================================================
 # Main loop
 # =========================================================
+
+PRINT_EVERY = 20
+print_counter = 0
 
 start_ms = time.ticks_ms()
 
@@ -211,25 +204,29 @@ try:
 
 
         # -------------------------------------------------
-        # Print
+        # Print (throttled; USB-serial print on every
+        # iteration blocks the loop far longer than 1 ms)
         # -------------------------------------------------
 
-        print(
-            t,
-            dist_cm,
-            val
-        )
+        print_counter += 1
+        if print_counter >= PRINT_EVERY:
+            print_counter = 0
+            print(
+                t,
+                dist_cm,
+                val
+            )
 
 
         # -------------------------------------------------
         # Log
         # -------------------------------------------------
 
-        logger.log(
-            time_s=t,
-            dist_cm=dist_cm,
-            dac_i2c=val
-        )
+        # logger.log(
+        #     time_s=t,
+        #     dist_cm=dist_cm,
+        #     dac_i2c=val
+        # )
 
 except KeyboardInterrupt:
 
