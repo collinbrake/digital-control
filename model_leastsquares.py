@@ -38,6 +38,19 @@ def leastsquares_model(y, u, order):
     coef = np.linalg.inv(M.T @ M) @ M.T @ Y
     return M, coef, Y
 
+def simulate_model(u, y, a, b, n):
+    # Run the model on the input data as a simulation
+    y_sim = np.zeros(len(y))
+    # populate the initial conditions
+    for l in range(n):
+        y_sim[l] = y[l]
+
+    for l in range(n, len(y)):
+        for i, ai in enumerate(a, start=1):
+            y_sim[l] -= ai*y[l-i]
+        for i, bi in enumerate(b):
+            y_sim[l] += bi*u[l-i]
+    return y_sim
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -62,17 +75,7 @@ def main():
 
     rms = np.sqrt(np.sum((Y - M @ coef) ** 2) / len(Y))
 
-    # Run the model on the input data as a simulation
-    y_sim = np.zeros(len(y))
-    # populate the initial conditions
-    for l in range(n):
-        y_sim[l] = y[l]
-
-    for l in range(n, len(y)):
-        for i, ai in enumerate(a, start=1):
-            y_sim[l] -= ai*y[l-i]
-        for i, bi in enumerate(b):
-            y_sim[l] += bi*u[l-i]
+    y_sim = simulate_model(u, y, a, b, n)
 
     print(f"\nDifference equation:")
     terms_y = " ".join(f"- ({a[i]:+.6g})*y[k-{i + 1}]" for i in range(n))
@@ -115,17 +118,23 @@ def main():
             color="#E64B35",
             alpha=0.9,
             linestyle=(0, (2, 2)),
-            marker="o",
-            markersize=3,
-            markevery=max(1, len(k) // 40),
-            markerfacecolor="white",
-            markeredgewidth=0.8,
             label="Difference equation simulation",
             zorder=4,
         )
+        ax1 = ax.twinx()
+        ax1.plot(
+            k,
+            u[n:],
+            color="green",
+            alpha=0.2,
+            linestyle="-",
+            label="Chirp input",
+            zorder=5,
+        )
         ax.set_xlabel("k")
         ax.set_ylabel(args.output_col)
-        ax.legend(frameon=True, framealpha=0.95)
+        ax.legend(frameon=True)
+        ax1.legend(frameon=True)
         ax.grid(True)
         plt.show()
 
