@@ -59,6 +59,7 @@ def main():
     parser.add_argument("--input-col", default="dac_i2c", help="Input (u) column name")
     parser.add_argument("--output-col", default="dist_cm", help="Output (y) column name")
     parser.add_argument("--no-plot", action="store_true", help="Skip plotting the fit vs. measured data")
+    parser.add_argument("--downsample", type=int, default=1, help="")
     args = parser.parse_args()
 
     csv_path = Path(args.file) if args.file else find_todays_file()
@@ -67,6 +68,10 @@ def main():
     df = pd.read_csv(csv_path)
     y = df[args.output_col].to_numpy()
     u = df[args.input_col].to_numpy()
+
+    if (args.downsample > 1):
+        u = u[0:len(u):args.downsample]
+        y = y[0:len(y):args.downsample]
 
     n = args.order
     M, coef, Y = leastsquares_model(y, u, n)
@@ -89,6 +94,14 @@ def main():
         print(f"  b{j} = {bj:.6g}")
 
     print(f"\nRMS fit error: {rms:.6g}")
+
+    if (args.order == 2):
+        print("\nPoles:")
+        p1 = -0.5*a[0] + 0.5*np.sqrt(a[0]**2 - 4*a[1])
+        p2 = -0.5*a[0] - 0.5*np.sqrt(a[0]**2 - 4*a[1])
+        print(f"  p1 = {p1:.6g}")
+        print(f"  p2 = {p2:.6g}")
+
 
     if not args.no_plot:
     
@@ -133,6 +146,7 @@ def main():
         )
         ax.set_xlabel("k")
         ax.set_ylabel(args.output_col)
+        ax1.set_ylabel(args.input_col)
         ax.legend(frameon=True)
         ax1.legend(frameon=True)
         ax.grid(True)
