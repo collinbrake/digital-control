@@ -1,11 +1,11 @@
 """Fit an nth-order ARX difference equation to data/<today>_model.csv via least squares.
 
 Adapted from p10_leastsquares.m: instead of fitting powers of x to f(x), the
-regressor matrix X here is built from past input/output samples so that
+regressor matrix coefhere is built from past input/output samples so that
 
     y[k] = -a1*y[k-1] - ... - an*y[k-n] + b0*u[k] + b1*u[k-1] + ... + bn*u[k-n]
 
-and A = inv(X'*X)*X'*f gives the difference-equation coefficients [a1..an, b0..bn].
+and M = inv(X'*X)*X'*f gives the difference-equation coefficients [a1..an, b0..bn].
 """
 import argparse
 import datetime
@@ -26,17 +26,17 @@ def find_todays_file(suffix="model"):
     return candidates[-1]
 
 
-def leastsquares_arx(y, u, order):
-    """Build X, f and solve A = inv(X'*X)*X'*f for an ARX(order, order) model."""
+def leastsquares_model(y, u, order):
+    """Build M (y[k-1]...y[k-n],u[k]...u[k-n]), Y (y[k]) and solve coef = inv(M'*M)*M'*Y for difference equation model."""
     n = order
     rows = [
         [-y[k - i] for i in range(1, n + 1)] + [u[k - j] for j in range(n + 1)]
         for k in range(n, len(y))
     ]
-    X = np.array(rows)
-    f = np.array(y[n:])
-    A = np.linalg.inv(X.T @ X) @ X.T @ f
-    return A, X, f
+    M = np.array(rows)
+    Y = np.array(y[n:])
+    coef = np.linalg.inv(M.T @ M) @ M.T @ Y
+    return M, coef, Y
 
 
 def main():
@@ -56,13 +56,25 @@ def main():
     u = df[args.input_col].to_numpy()
 
     n = args.order
-    A, X, f = leastsquares_arx(y, u, n)
-    a = A[:n]
-    b = A[n:]
+    M, coef, Y = leastsquares_model(y, u, n)
+    a = coef[:n]
+    b = coef[n:]
 
-    rms = np.sqrt(np.sum((f - X @ A) ** 2) / len(f))
+    rms = np.sqrt(np.sum((Y - M @ coef) ** 2) / len(Y))
 
-    print(f"\nARX({n},{n}) difference equation:")
+    # Run the model on the input data as a simulation
+    y_sim = np.zeros(len(y))
+    # populate the initial conditions
+    for l in range(n):
+        y_sim[l] = y[l]
+
+    for l in range(n, len(y)):
+        for i, ai in enumerate(a, start=1):
+            y_sim[l] -= ai*y[l-i]
+        for i, bi in enumerate(b):
+            y_sim[l] += bi*u[l-i]
+
+    print(f"\nDifference equation:")
     terms_y = " ".join(f"- ({a[i]:+.6g})*y[k-{i + 1}]" for i in range(n))
     terms_u = " + ".join(f"({b[j]:+.6g})*u[k-{j}]" for j in range(n + 1))
     print(f"y[k] = {terms_y} + {terms_u}")
@@ -76,13 +88,44 @@ def main():
     print(f"\nRMS fit error: {rms:.6g}")
 
     if not args.no_plot:
+    
         k = np.arange(n, len(y))
         fig, ax = plt.subplots()
-        ax.plot(k, f, label="Measured")
-        ax.plot(k, X @ A, label="ARX fit", linestyle="--")
+        ax.plot(
+            k,
+            Y,
+            color="black",
+            alpha=0.9,
+            linestyle="--",
+            label="Measured chirp response",
+            zorder=3,
+        )
+        ax.plot(
+            k,
+            M @ coef,
+            color="#0B84F3",
+            alpha=0.9,
+            linestyle=(0, (8, 3)),
+            label="Least squares difference equation result (M * coef)",
+            zorder=2,
+        )
+        ax.plot(
+            k,
+            y_sim[n:],
+            color="#E64B35",
+            alpha=0.9,
+            linestyle=(0, (2, 2)),
+            marker="o",
+            markersize=3,
+            markevery=max(1, len(k) // 40),
+            markerfacecolor="white",
+            markeredgewidth=0.8,
+            label="Difference equation simulation",
+            zorder=4,
+        )
         ax.set_xlabel("k")
         ax.set_ylabel(args.output_col)
-        ax.legend()
+        ax.legend(frameon=True, framealpha=0.95)
         ax.grid(True)
         plt.show()
 
