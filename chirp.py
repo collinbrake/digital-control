@@ -39,9 +39,9 @@ dac_buf = bytearray(6)
 # =========================================================
 
 val = 0
-T = 1          # control period (ms)
+T = 10          # control period (ms)
 k = 0           # sample count
-omega2 = 2*(T/1000)**2    # chirp function frequency squared
+omega2 = T*2*(1/1000)**2    # chirp function frequency squared
 A = 1500
 dist_cm = 0
 i2c_error_count = 0

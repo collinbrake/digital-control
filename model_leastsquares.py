@@ -47,7 +47,7 @@ def simulate_model(u, y, a, b, n):
 
     for l in range(n, len(y)):
         for i, ai in enumerate(a, start=1):
-            y_sim[l] -= ai*y[l-i]
+            y_sim[l] -= ai*y_sim[l-i]
         for i, bi in enumerate(b):
             y_sim[l] += bi*u[l-i]
     return y_sim
@@ -96,9 +96,11 @@ def main():
     print(f"\nRMS fit error: {rms:.6g}")
 
     if (args.order == 2):
+        # complex D(Z) to calculate complex roots
+        ac = a.astype(complex)
         print("\nPoles:")
-        p1 = -0.5*a[0] + 0.5*np.sqrt(a[0]**2 - 4*a[1])
-        p2 = -0.5*a[0] - 0.5*np.sqrt(a[0]**2 - 4*a[1])
+        p1 = -0.5*ac[0] + 0.5*np.sqrt(ac[0]**2 - 4*ac[1])
+        p2 = -0.5*ac[0] - 0.5*np.sqrt(ac[0]**2 - 4*ac[1])
         print(f"  p1 = {p1:.6g}")
         print(f"  p2 = {p2:.6g}")
 
