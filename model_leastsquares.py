@@ -16,6 +16,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 DATA_DIR = Path(__file__).parent / "data"
+MODEL_DIR = Path(__file__).parent / "model"
 
 
 def find_todays_file(suffix="model"):
@@ -26,17 +27,36 @@ def find_todays_file(suffix="model"):
     return candidates[-1]
 
 
-def leastsquares_model(y, u, order):
-    """Build M (y[k-1]...y[k-n],u[k]...u[k-n]), Y (y[k]) and solve coef = inv(M'*M)*M'*Y for difference equation model."""
-    n = order
+def build_regressors(y, u, n):
+    """Build M (y[k-1]...y[k-n],u[k]...u[k-n]) and Y (y[k])."""
     rows = [
         [-y[k - i] for i in range(1, n + 1)] + [u[k - j] for j in range(n + 1)]
         for k in range(n, len(y))
     ]
-    M = np.array(rows)
-    Y = np.array(y[n:])
-    coef = np.linalg.inv(M.T @ M) @ M.T @ Y
+    return np.array(rows), np.array(y[n:])
+
+
+def leastsquares_model(y, u, order):
+    """Solve M*coef = Y in the least-squares sense."""
+    M, Y = build_regressors(y, u, order)
+    coef, *_ = np.linalg.lstsq(M, Y, rcond=None)
     return M, coef, Y
+
+
+def save_model(coef, n, source):
+    MODEL_DIR.mkdir(exist_ok=True)
+    names = [f"a{i}" for i in range(1, n + 1)] + [f"b{j}" for j in range(n + 1)]
+    path = MODEL_DIR / f"{datetime.date.today().isoformat()}_model_order{n}.csv"
+    pd.DataFrame([coef], columns=names).assign(source=source).to_csv(path, index=False)
+    return path
+
+
+def load_model(path):
+    row = pd.read_csv(path).iloc[0]
+    a = np.array([row[c] for c in row.index if c.startswith("a")], dtype=float)
+    b = np.array([row[c] for c in row.index if c.startswith("b")], dtype=float)
+    return np.concatenate([a, b]), len(a)
+
 
 def simulate_model(u, y, a, b, n):
     # Run the model on the input data as a simulation
@@ -59,24 +79,32 @@ def main():
     parser.add_argument("--input-col", default="dac_i2c", help="Input (u) column name")
     parser.add_argument("--output-col", default="dist_cm", help="Output (y) column name")
     parser.add_argument("--no-plot", action="store_true", help="Skip plotting the fit vs. measured data")
-    parser.add_argument("--downsample", type=int, default=1, help="")
+    parser.add_argument("--start", type=int, default=None, help="First row (0-based) of the data to use")
+    parser.add_argument("--end", type=int, default=None, help="Row (0-based) to stop at, exclusive")
+    parser.add_argument("--save", action="store_true", help="Save coefficients to model/<date>_model_order<n>.csv")
+    parser.add_argument("--model", default=None, help="Saved model CSV to simulate instead of fitting")
     args = parser.parse_args()
 
     csv_path = Path(args.file) if args.file else find_todays_file()
-    print(f"Fitting {csv_path}")
 
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(csv_path).iloc[args.start:args.end]
     y = df[args.output_col].to_numpy()
     u = df[args.input_col].to_numpy()
+    k0 = args.start or 0
 
-    if (args.downsample > 1):
-        u = u[0:len(u):args.downsample]
-        y = y[0:len(y):args.downsample]
-
-    n = args.order
-    M, coef, Y = leastsquares_model(y, u, n)
+    if args.model:
+        print(f"Simulating {args.model} on {csv_path}")
+        coef, n = load_model(args.model)
+        M, Y = build_regressors(y, u, n)
+    else:
+        print(f"Fitting {csv_path}")
+        n = args.order
+        M, coef, Y = leastsquares_model(y, u, n)
     a = coef[:n]
     b = coef[n:]
+
+    if args.save and not args.model:
+        print(f"Saved model to {save_model(coef, n, csv_path.name)}")
 
     rms = np.sqrt(np.sum((Y - M @ coef) ** 2) / len(Y))
 
@@ -95,7 +123,7 @@ def main():
 
     print(f"\nRMS fit error: {rms:.6g}")
 
-    if (args.order == 2):
+    if n == 2:
         # complex D(Z) to calculate complex roots
         ac = a.astype(complex)
         print("\nPoles:")
@@ -107,7 +135,7 @@ def main():
 
     if not args.no_plot:
     
-        k = np.arange(n, len(y))
+        k = np.arange(n, len(y)) + k0
         fig, ax = plt.subplots()
         ax.plot(
             k,
