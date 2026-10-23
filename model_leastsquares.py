@@ -84,13 +84,16 @@ def main():
     parser.add_argument("--save", action="store_true", help="Save coefficients to model/<date>_model_order<n>.csv")
     parser.add_argument("--model", default=None, help="Saved model CSV to simulate instead of fitting")
     parser.add_argument("--y-offset", type=float, default=9.0, help="DC offset subtracted from the output (default: 9.0)")
+    parser.add_argument("--decimate", type=int, default=1, help="Keep every Nth row (default: 1)")
+    parser.add_argument("--u-scale", type=float, default=1.0, help="Divide the input by this value (default: 1.0)")
+    parser.add_argument("--y-scale", type=float, default=1.0, help="Divide the output (after offset removal) by this value (default: 1.0)")
     args = parser.parse_args()
 
     csv_path = Path(args.file) if args.file else find_todays_file()
 
-    df = pd.read_csv(csv_path).iloc[args.start:args.end]
-    y = df[args.output_col].to_numpy() - args.y_offset
-    u = df[args.input_col].to_numpy()
+    df = pd.read_csv(csv_path).iloc[args.start:args.end:args.decimate]
+    y = (df[args.output_col].to_numpy() - args.y_offset) / args.y_scale
+    u = df[args.input_col].to_numpy() / args.u_scale
     k0 = args.start or 0
 
     if args.model:
@@ -128,10 +131,14 @@ def main():
     for i, p in enumerate(np.roots(np.concatenate([[1.0], a])), start=1):
         print(f"  p{i} = {p:.6g}")
 
+    print("\nZeros:")
+    for i, z in enumerate(np.roots(b), start=1):
+        print(f"  z{i} = {z:.6g}")
+
 
     if not args.no_plot:
     
-        k = np.arange(n, len(y)) + k0
+        k = np.arange(n, len(y)) * args.decimate + k0
         fig, ax = plt.subplots()
         ax.plot(
             k,
