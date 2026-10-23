@@ -16,4 +16,4 @@ python model_leastsquares.py --file data/2026-10-07_model_100Hz.csv --start 10 -
 python model_leastsquares.py --file data/2026-10-07_model_1kHz.csv --model model/2026-10-23_model_order2.csv
 ```
 
-Without `--file`, it uses today's `data/<date>_model.csv`. Run `python model_leastsquares.py -h` for other options (`--order`, `--no-plot`, etc.).
+Without `--file`, it uses today's `data/<date>_model.csv`. The output offset `--y-offset` (default 9.0) is subtracted from the data before fitting or simulating. Run `python model_leastsquares.py -h` for other options (`--order`, `--no-plot`, etc.).

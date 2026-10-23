@@ -83,17 +83,18 @@ def main():
     parser.add_argument("--end", type=int, default=None, help="Row (0-based) to stop at, exclusive")
     parser.add_argument("--save", action="store_true", help="Save coefficients to model/<date>_model_order<n>.csv")
     parser.add_argument("--model", default=None, help="Saved model CSV to simulate instead of fitting")
+    parser.add_argument("--y-offset", type=float, default=9.0, help="DC offset subtracted from the output (default: 9.0)")
     args = parser.parse_args()
 
     csv_path = Path(args.file) if args.file else find_todays_file()
 
     df = pd.read_csv(csv_path).iloc[args.start:args.end]
-    y = df[args.output_col].to_numpy()
+    y = df[args.output_col].to_numpy() - args.y_offset
     u = df[args.input_col].to_numpy()
     k0 = args.start or 0
 
     if args.model:
-        print(f"Simulating {args.model} on {csv_path}")
+        print(f"Using SAVED model {args.model} (no fitting) on {csv_path}")
         coef, n = load_model(args.model)
         M, Y = build_regressors(y, u, n)
     else:
@@ -106,31 +107,26 @@ def main():
     if args.save and not args.model:
         print(f"Saved model to {save_model(coef, n, csv_path.name)}")
 
-    rms = np.sqrt(np.sum((Y - M @ coef) ** 2) / len(Y))
-
     y_sim = simulate_model(u, y, a, b, n)
 
-    print(f"\nDifference equation:")
-    terms_y = " ".join(f"- ({a[i]:+.6g})*y[k-{i + 1}]" for i in range(n))
-    terms_u = " + ".join(f"({b[j]:+.6g})*u[k-{j}]" for j in range(n + 1))
-    print(f"y[k] = {terms_y} + {terms_u}")
+    rms = np.sqrt(np.mean((Y - y_sim[n:]) ** 2))
+    print(f"\nRMS simulation error: {rms:.6g}")
 
-    print("\nCoefficients:")
-    for i, ai in enumerate(a, start=1):
-        print(f"  a{i} = {ai:.6g}")
-    for j, bj in enumerate(b):
-        print(f"  b{j} = {bj:.6g}")
+    if not args.model:
+        print(f"\nDifference equation:")
+        terms_y = " ".join(f"- ({a[i]:+.6g})*y[k-{i + 1}]" for i in range(n))
+        terms_u = " + ".join(f"({b[j]:+.6g})*u[k-{j}]" for j in range(n + 1))
+        print(f"y[k] = {terms_y} + {terms_u}")
 
-    print(f"\nRMS fit error: {rms:.6g}")
+        print("\nCoefficients:")
+        for i, ai in enumerate(a, start=1):
+            print(f"  a{i} = {ai:.6g}")
+        for j, bj in enumerate(b):
+            print(f"  b{j} = {bj:.6g}")
 
-    if n == 2:
-        # complex D(Z) to calculate complex roots
-        ac = a.astype(complex)
-        print("\nPoles:")
-        p1 = -0.5*ac[0] + 0.5*np.sqrt(ac[0]**2 - 4*ac[1])
-        p2 = -0.5*ac[0] - 0.5*np.sqrt(ac[0]**2 - 4*ac[1])
-        print(f"  p1 = {p1:.6g}")
-        print(f"  p2 = {p2:.6g}")
+    print("\nPoles:")
+    for i, p in enumerate(np.roots(np.concatenate([[1.0], a])), start=1):
+        print(f"  p{i} = {p:.6g}")
 
 
     if not args.no_plot:
