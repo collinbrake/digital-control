@@ -52,4 +52,4 @@ The pure plant step response aligns well with a measured step response. The DC g
 ![measured step response](assets/step_meas.png)
 
 Maximum control effort of F(z) is 14.29 V, which is around the achievable limit of the controller output:
-![control effort](control_effort.png)
+![control effort](assets/control_effort.png)
