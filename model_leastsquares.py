@@ -30,7 +30,7 @@ def find_todays_file(suffix="model"):
 def build_regressors(y, u, n):
     """Build M (y[k-1]...y[k-n],u[k]...u[k-n]) and Y (y[k])."""
     rows = [
-        [-y[k - i] for i in range(1, n + 1)] + [u[k - j] for j in range(n + 1)]
+        [-y[k - i] for i in range(1, n + 1)] + [u[k - j] for j in range(1, n + 1)]
         for k in range(n, len(y))
     ]
     return np.array(rows), np.array(y[n:])
@@ -45,7 +45,7 @@ def leastsquares_model(y, u, order):
 
 def save_model(coef, n, source):
     MODEL_DIR.mkdir(exist_ok=True)
-    names = [f"a{i}" for i in range(1, n + 1)] + [f"b{j}" for j in range(n + 1)]
+    names = [f"a{i}" for i in range(1, n + 1)] + [f"b{j}" for j in range(1, n + 1)]
     path = MODEL_DIR / f"{datetime.date.today().isoformat()}_model_order{n}.csv"
     pd.DataFrame([coef], columns=names).assign(source=source).to_csv(path, index=False)
     return path
@@ -68,7 +68,7 @@ def simulate_model(u, y, a, b, n):
     for l in range(n, len(y)):
         for i, ai in enumerate(a, start=1):
             y_sim[l] -= ai*y_sim[l-i]
-        for i, bi in enumerate(b):
+        for i, bi in enumerate(b, start=1):
             y_sim[l] += bi*u[l-i]
     return y_sim
 
@@ -118,13 +118,13 @@ def main():
     if not args.model:
         print(f"\nDifference equation:")
         terms_y = " ".join(f"- ({a[i]:+.6g})*y[k-{i + 1}]" for i in range(n))
-        terms_u = " + ".join(f"({b[j]:+.6g})*u[k-{j}]" for j in range(n + 1))
+        terms_u = " + ".join(f"({b[j]:+.6g})*u[k-{j+1}]" for j in range(n))
         print(f"y[k] = {terms_y} + {terms_u}")
 
         print("\nCoefficients:")
         for i, ai in enumerate(a, start=1):
             print(f"  a{i} = {ai:.6g}")
-        for j, bj in enumerate(b):
+        for j, bj in enumerate(b, start=1):
             print(f"  b{j} = {bj:.6g}")
 
     print("\nPoles:")
