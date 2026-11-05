@@ -45,18 +45,39 @@ def main():
     print(df.head())
 
     time_col = df.columns[0]
-    fig, ax = plt.subplots()
+    signal_cols = [col for col in ("u1", "r") if col in df.columns]
+    if signal_cols:
+        fig, (ax, signal_ax) = plt.subplots(2, 1, sharex=True)
+    else:
+        fig, ax = plt.subplots()
+        signal_ax = None
+
     ax2 = ax.twinx()
     notfirst = False
     for col in df.columns[1:]:
+        if col in signal_cols:
+            continue
         if notfirst:
             ax2.plot(df[time_col], df[col], label=col, color="red")
         else:
             ax.plot(df[time_col], df[col], label=col, color="blue")
         notfirst = True
-    ax.set_xlabel(time_col)
     ax.legend()
     ax2.legend()
+
+    if signal_ax is not None:
+        if "u1" in signal_cols:
+            signal_ax.plot(df[time_col], df["u1"], label="u1", color="blue")
+            signal_ax.set_ylabel("u1")
+        if "r" in signal_cols:
+            r_ax = signal_ax.twinx()
+            r_ax.plot(df[time_col], df["r"], label="r", color="red")
+            r_ax.set_ylabel("r")
+            r_ax.legend()
+        signal_ax.legend()
+        signal_ax.set_xlabel(time_col)
+    else:
+        ax.set_xlabel(time_col)
 
     if saved_csv:
         png_dest = saved_csv.with_suffix(".png")

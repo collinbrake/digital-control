@@ -41,9 +41,15 @@ dac_buf = bytearray(6)
 val = 0
 T = 50          # control period (ms)
 k = 0           # sample count
-A = -5/15*4095 # -1 V input
+A = -0.5 # -1 V input
 dist_cm = 0
 i2c_error_count = 0
+
+# state variables
+u1km1 = 0
+u1km2 = 0
+r1km1 = 0
+r1km2 = 0
 
 # =========================================================
 # Timer ISR
@@ -65,6 +71,10 @@ def _timer_isr_body(timer):
     global k
     global val 
     global dist_cm
+    global u1km1
+    global u1km2
+    global r1km1
+    global r1km2
 
     # -------------------------------------------------
     # Read distance sensor
@@ -88,9 +98,17 @@ def _timer_isr_body(timer):
     # since it stands in for real elapsed time in the chirp below
     k += 1
 
-    val = A
+    r = A
     if k < 100:
-        val = 0
+        r = 0
+
+    u1 = 1.72*u1km1 - 0.7396*u1km2 + 14.29*r - 27.57*r1km1 +13.53*r1km2
+    u1km2 = u1km1
+    u1km1 = u1
+    r1km2 = r1km1
+    r1km1 = r
+
+    val = u1/15*4095
 
     if val > 0:
         vp = val
@@ -159,14 +177,14 @@ def _timer_isr_body(timer):
     latch_n.value(0)
     latch_n.value(1)
 
-    file.write(str(k) + "," + str(dist_cm) + "," + str(val) + "\r\n")
+    file.write(str(k) + "," + str(dist_cm) + "," + str(val) + "," + str(u1) + "," + str(r) + "\r\n")
     
 # =========================================================
 # CSV logging
 # =========================================================
 
 file = open("data.csv", "w")
-file.write("k,dist_cm,dac_i2c\r\n")
+file.write("k,dist_cm,dac_i2c,u1,r\r\n")
 
 # =========================================================
 # Check I2C devices
