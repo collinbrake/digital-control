@@ -41,7 +41,7 @@ dac_buf = bytearray(6)
 val = 0
 T = 50          # control period (ms)
 k = 0           # sample count
-A = -1/15 * 4096 # 1 V input
+A = -5/15*4095 # -1 V input
 dist_cm = 0
 i2c_error_count = 0
 
