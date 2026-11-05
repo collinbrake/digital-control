@@ -41,7 +41,7 @@ dac_buf = bytearray(6)
 val = 0
 T = 50          # control period (ms)
 k = 0           # sample count
-A = -0.5 # -1 V input
+A = 1 # -1 V input
 dist_cm = 0
 i2c_error_count = 0
 
@@ -99,7 +99,7 @@ def _timer_isr_body(timer):
     k += 1
 
     r = A
-    if k < 100:
+    if k < 300:
         r = 0
 
     u1 = 1.72*u1km1 - 0.7396*u1km2 + 14.29*r - 27.57*r1km1 +13.53*r1km2
@@ -108,7 +108,7 @@ def _timer_isr_body(timer):
     r1km2 = r1km1
     r1km1 = r
 
-    val = u1/15*4095
+    val = -r/15*4095 # align the coil direction with DAC
 
     if val > 0:
         vp = val
