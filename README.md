@@ -108,14 +108,23 @@ Use the rule of thumb equation for zero placement (4.5 rad/s * 0.05s -> 12.89 de
 ```matlab
 a = 1 - 12.89/500 = 0.97422
 ```
+This placement did not provide the needed rise/settling time, so a final zero placement of 0.85 was chosen.
 
 To calculate the pole location:
 ```matlab
 99 = D(1)*G(1)
 
-      1 - 0.97422          1 - 0.85      0.00998879 - 0.00861729
+      1 - 0.85             1 - 0.85      0.00998879 - 0.00861729
 99 = ------------- * 18 * ---------- *  -------------------------
       1 - p                1 - 0.72      1 - 1.92894 + 0.946607
 
-p = 0.9998 ~= 1
+p = 0.998
 ```
+
+Final lead-lag compensator and plant frequency response, showing 55 degrees of phase margin:
+
+![](assets/D_G_bode_closed_loop_sim.png)
+
+Final lead-lag compensated step response, showing around 2 seconds of settling time:
+
+![](assets/D_G_step_closed_loop_sim.png)
