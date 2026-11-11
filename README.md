@@ -64,17 +64,23 @@ This is significantly better than uncontrolled, open-loop plant step response G(
 
 ## Closed-loop control
 
-To design a closed-loop controller, F(z) for this system we target DC gain of 1 (cm/V) for F(z)*Gplant(z), and cancellation of the poles at `0.9644 +/- i*0.1281`.
+To design a closed-loop controller, F(z) for this system we target 1/5 the settling time to a step response that the uncompensated plant response has:
 
-Controller (see hw11_solution.m):
+![](assets/G_step_closed_loop_sim.png)
 
-```matlab
-F =
- 
-  14.29 z^2 - 27.57 z + 13.53
-  ---------------------------
-     z^2 - 1.72 z + 0.7396
- 
-Sample time: 0.05 seconds
-Discrete-time transfer function.
-```
+We need a 5% setting time of about 1 second. That means a bandwidth of around 4 rad/s. 
+
+![](assets/G_bode_closed_loop_sim.png)
+
+Let's add around 20 degrees of phase lead at 4.5 rad/s for a phase margin of the lead-compensated system of around 90 degrees. Using geometry, this means a zero at around 0.85 and a pole at around 0.72.
+
+Dlead(z)*G(z):
+![](assets/Dlead_G_bode_closed_loop_sim.png)
+
+This achieves our phase lead of 20 degrees at 4.5 rad/s. To make this the bandwidth frequency, Klead = 10^(25/20) = 10^(5/4) ~= 18.
+
+Using a gain of 18, we achieve bandwidth of 4.5 rad/s. 18\*Dlead(z)*G(z):
+![](assets/Klead_Dlead_G_bode_closed_loop_sim.png)
+
+And the 5% settling time is pretty close to target:
+![](assets/Klead_Dlead_G_step_closed_loop_sim.png)
