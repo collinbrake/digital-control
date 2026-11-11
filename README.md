@@ -68,6 +68,10 @@ To design a closed-loop controller, F(z) for this system we target 1/5 the settl
 
 ![](assets/G_step_closed_loop_sim.png)
 
+We need to achieve less than 2% steady state error.
+
+### Lead compensator design
+
 We need a 5% setting time of about 1 second. That means a bandwidth of around 4 rad/s. 
 
 ![](assets/G_bode_closed_loop_sim.png)
@@ -84,3 +88,34 @@ Using a gain of 18, we achieve bandwidth of 4.5 rad/s. 18\*Dlead(z)*G(z):
 
 And the 5% settling time is pretty close to target:
 ![](assets/Klead_Dlead_G_step_closed_loop_sim.png)
+
+### Lag compensator design
+
+We need steady state error less than 2%. Let's target 1%.
+
+The DC gain of the closed-loop transfer function is given by:
+
+```matlab
+  D(1)*G(1)
+-------------
+1 + D(1)*G(1)
+```
+
+The DC gain of the open-loop transfer function `D(z)*G(z)` must be 99 -> ~40 dB.
+
+Use the rule of thumb equation for zero placement (4.5 rad/s * 0.05s -> 12.89 deg):
+
+```matlab
+a = 1 - 12.89/500 = 0.97422
+```
+
+To calculate the pole location:
+```matlab
+99 = D(1)*G(1)
+
+      1 - 0.97422          1 - 0.85      0.00998879 - 0.00861729
+99 = ------------- * 18 * ---------- *  -------------------------
+      1 - p                1 - 0.72      1 - 1.92894 + 0.946607
+
+p = 0.9998 ~= 1
+```
