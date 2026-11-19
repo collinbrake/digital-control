@@ -108,7 +108,7 @@ def _timer_isr_body(timer):
     r1km2 = r1km1
     r1km1 = r
 
-    val = -r/15*4095 # align the coil direction with DAC
+    val = -u1/15*4095 # align the coil direction with DAC
 
     if val > 0:
         vp = val
