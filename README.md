@@ -95,31 +95,36 @@ The DC gain of the closed-loop transfer function is given by:
 1 + D(1)*G(1)
 ```
 
-The DC gain of the open-loop transfer function `D(z)*G(z)` must be 99 -> ~40 dB.
+The DC gain of the open-loop transfer function `D(z)*G(z)` must be at least 99 -> ~40 dB.
 
 Use the rule of thumb equation for zero placement (4.5 rad/s * 0.05s -> 12.89 deg):
 
 ```matlab
 a = 1 - 12.89/500 = 0.97422
 ```
-This placement did not provide the needed rise/settling time, so a final zero placement of 0.85 was chosen.
+While this placement minimizes phase lag at the crossover frequency, it creates a slow closed-loop pole near $z = 0.989$ (a "lag tail") that takes over 10 seconds to fully settle. Therefore, a faster zero placement of $0.85$ was chosen.
 
-To calculate the pole location:
+To calculate the pole location $p$, factoring in the lead gain $K = 18$:
 ```matlab
-99 = D(1)*G(1)
+99 = D(1)*G(1) = Klead * Dlag(1) * Dlead(1) * G(1)
 
-      1 - 0.85        1 - 0.85      0.00998879 - 0.00861729
-99 = ------------- * ---------- *  -------------------------
-      1 - p           1 - 0.72      1 - 1.92894 + 0.946607
+      1 - 0.85             1 - 0.85      0.00998879 - 0.00861729
+99 = ------------- * 18 * ---------- *  -------------------------
+      1 - p                1 - 0.72      1 - 1.92894 + 0.946607
 
-p = 0.999937
+p = 0.998866
 ```
 
-With K = 1, here is the frequency response of the closed-loop system with a lead-lag compensator:
-![](assets/Dlag_Dlead_G_bode_closed_loop_sim.png)
+The combined lead-lag compensator $D(z) = 18 \cdot D_{\text{lag}}(z) \cdot D_{\text{lead}}(z)$ is:
 
-K=40 produces a good step response with 5% settling time of 1.5s. The final phase margin is around 60%.
+```matlab
+         18 (z - 0.85)^2            18 z^2 - 30.6 z + 13.005
+D(z) = ----------------------- = ------------------------------
+       (z - 0.72)(z - 0.9989)       z^2 - 1.7189 z + 0.7192
+```
 
-![](assets/K_Dlag_Dlead_G_step_closed_loop_sim.png)
+### Hardware Implementation Considerations
 
-![](assets/K_Dlag_Dlead_G_bode_closed_loop_sim.png)
+1. **Actuator Authority Limits**: The physical coil can only displace the object from $\sim 6.0\text{ cm}$ (resting) to $\sim 7.35\text{ cm}$ (maximum power, $-4095$ DAC counts). Requesting setpoints beyond this range (e.g., $r = 8.0\text{ cm}$) is physically unattainable and causes the controller to permanently peg at $+15\text{ V}$. Setpoints must remain within the achievable linear range (e.g., baseline $r = 6.8\text{ cm}$, stepping to $r = 7.1\text{ cm}$).
+2. **Gain Selection ($K = 18$ vs. $K = 40$)**: While $K = 40$ appears faster in an idealized, unconstrained linear simulation, on physical hardware $K = 40$ commands excessive voltages ($40\text{ V/cm}$), immediately saturating the $\pm 15\text{ V}$ DAC and eroding phase margin due to sensor latency ($\sim 35\text{ ms}$). $K = 18$ maintains peak control efforts within $\approx 5\text{ V}$ and delivers stable, non-saturating control.
+3. **Anti-Windup Clamping**: Because the lag pole $p \approx 0.9989 \approx 1.0$ acts as an accumulator/integrator, internal states must be clamped to the physical $\pm 15\text{ V}$ actuator limits (`u1 = max(-15.0, min(15.0, u1))`) to prevent integrator runaway during transient saturation.
