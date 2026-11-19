@@ -14,29 +14,29 @@ step(G);
 
 % lead compensator
 Dlead = tf([1, -0.85], [1, -0.72], T);
-Klead = 18;
+% Klead = 18;
 
 % zero-placement
 target_bandwidth = 4.5;
 lag_zero = 1 - rad2deg(target_bandwidth*T)/500;
 lag_zero = 0.85;
 target_dc_loop_gain = 99;
-p = 1 - (1 - lag_zero)*Klead*dcgain(Dlead)*dcgain(G)/target_dc_loop_gain;
-Dlag = tf([1, -lag_zero], [1, -p], T);
-achieved_dc_loop_gain = dcgain(Klead*Dlag*Dlead*G);
+p = 1 - (1 - lag_zero)*dcgain(Dlead)*dcgain(G)/target_dc_loop_gain
+K = 40
+Dlag = K*tf([1, -lag_zero], [1, -p], T);
 
-fprintf('Lag compensator zero = %.6f, pole p = %.6f\n', lag_zero, p);
+Dlag*Dlead
 
 figure(3)
 bode(Dlead*G);
 figure(4)
 
 figure(5)
-bode(Klead*Dlead*G);
+bode(Dlead*G);
 figure(6)
-step(Klead*Dlead*G/(1 + 18*Dlead*G));
+step(Dlead*G/(1 + Dlead*G));
 
 figure(7)
-bode(Dlag*Klead*Dlead*G);
+bode(Dlag*Dlead*G);
 figure(8)
-step(Dlag*Klead*Dlead*G/(1 + Dlag*Klead*Dlead*G));
+step(Dlag*Dlead*G/(1 + Dlag*Dlead*G));

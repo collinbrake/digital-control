@@ -81,13 +81,7 @@ Let's add around 20 degrees of phase lead at 4.5 rad/s for a phase margin of the
 Dlead(z)*G(z):
 ![](assets/Dlead_G_bode_closed_loop_sim.png)
 
-This achieves our phase lead of 20 degrees at 4.5 rad/s. To make this the bandwidth frequency, Klead = 10^(25/20) = 10^(5/4) ~= 18.
-
-Using a gain of 18, we achieve bandwidth of 4.5 rad/s. 18\*Dlead(z)*G(z):
-![](assets/Klead_Dlead_G_bode_closed_loop_sim.png)
-
-And the 5% settling time is pretty close to target:
-![](assets/Klead_Dlead_G_step_closed_loop_sim.png)
+This achieves our phase lead of 20 degrees at 4.5 rad/s.
 
 ### Lag compensator design
 
@@ -114,17 +108,18 @@ To calculate the pole location:
 ```matlab
 99 = D(1)*G(1)
 
-      1 - 0.85             1 - 0.85      0.00998879 - 0.00861729
-99 = ------------- * 18 * ---------- *  -------------------------
-      1 - p                1 - 0.72      1 - 1.92894 + 0.946607
+      1 - 0.85        1 - 0.85      0.00998879 - 0.00861729
+99 = ------------- * ---------- *  -------------------------
+      1 - p           1 - 0.72      1 - 1.92894 + 0.946607
 
-p = 0.998
+p = 0.999937
 ```
 
-Final lead-lag compensator and plant frequency response, showing 55 degrees of phase margin:
+With K = 1, here is the frequency response of the closed-loop system with a lead-lag compensator:
+![](assets/Dlag_Dlead_G_bode_closed_loop_sim.png)
 
-![](assets/D_G_bode_closed_loop_sim.png)
+K=40 produces a good step response with 5% settling time of 1.5s. The final phase margin is around 60%.
 
-Final lead-lag compensated step response, showing around 2 seconds of settling time:
+![](assets/K_Dlag_Dlead_G_step_closed_loop_sim.png)
 
-![](assets/D_G_step_closed_loop_sim.png)
+![](assets/K_Dlag_Dlead_G_bode_closed_loop_sim.png)
