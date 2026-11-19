@@ -50,8 +50,8 @@ i2c_error_count = 0
 # state variables
 u1km1 = 0
 u1km2 = 0
-r1km1 = 0
-r1km2 = 0
+e1km1 = 0
+e1km2 = 0
 
 # =========================================================
 # Timer ISR
@@ -77,8 +77,8 @@ def _timer_isr_body(timer):
     global dist_cm
     global u1km1
     global u1km2
-    global r1km1
-    global r1km2
+    global e1km1
+    global e1km2
 
     # -------------------------------------------------
     # Read distance sensor
@@ -108,17 +108,21 @@ def _timer_isr_body(timer):
 
     e = r - dist_cm
 
-    u1 = 1.72*u1km1 - 0.72*u1km2 + 4*e - 6*r1km1 + 3*r1km2
+    u1 = 1.72 * u1km1 - 0.72 * u1km2 + 40.0 * e - 68.0 * e1km1 + 28.9 * e1km2
+
+    # Anti-windup: clamp controller output to physical actuator limits (+/- 15 V)
+    u1 = max(-15.0, min(15.0, u1))
+
     u1km2 = u1km1
     u1km1 = u1
-    r1km2 = r1km1
-    r1km1 = e
+    e1km2 = e1km1
+    e1km1 = e
 
-    val = -u1/15*4095 # align the coil direction with DAC
+    val = -u1 / 15 * 4095 # align the coil direction with DAC
     #val = 0
 
     # 12-bit DAC: anything beyond 4095 spills into the config bits of the high byte
-    val = max(-4095, min(4095, val))
+    val = max(-4095, min(4095, int(val)))
 
     if val > 0:
         vp = val
