@@ -43,7 +43,7 @@ T = 50          # control period (ms)
 k = 0           # sample count
 r = 0
 e = 0
-A = 1
+A = 1 # -1 V input
 dist_cm = 0
 i2c_error_count = 0
 
@@ -102,15 +102,13 @@ def _timer_isr_body(timer):
     # since it stands in for real elapsed time in the chirp below
     k += 1
 
-    r = A + 6
+    r = A + 7
     if k < 300:
-        r = 6
+        r = 7
 
     e = r - dist_cm
 
-    # Lead-lag compensator (K=18, D = 18 * Dlag * Dlead):
-    # D(z) = 18 * (z - 0.85)^2 / ((z - 0.72) * (z - 0.998866))
-    u1 = 1.2996219*u1km1 - 0.2998866*u1km2 + 2*(15.0000000*e -25.5000000*e1km1 +10.8375000*e1km2)
+    u1 = 1.72 * u1km1 - 0.72 * u1km2 + 40.0 * e - 68.0 * e1km1 + 28.9 * e1km2
 
     # Anti-windup: clamp controller output to physical actuator limits (+/- 15 V)
     u1 = max(-15.0, min(15.0, u1))
