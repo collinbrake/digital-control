@@ -43,7 +43,8 @@ T = 50          # control period (ms)
 k = 0           # sample count
 r = 0
 e = 0
-A = 1 # -1 V input
+A = 2 # -1 V input
+offset = 6
 dist_cm = 0
 i2c_error_count = 0
 
@@ -102,13 +103,13 @@ def _timer_isr_body(timer):
     # since it stands in for real elapsed time in the chirp below
     k += 1
 
-    r = A + 7
+    r = A + offset
     if k < 300:
-        r = 7
+        r = offset
 
     e = r - dist_cm
 
-    u1 = 1.72 * u1km1 - 0.72 * u1km2 + 40.0 * e - 68.0 * e1km1 + 28.9 * e1km2
+    u1 = 30.0 * e
 
     # Anti-windup: clamp controller output to physical actuator limits (+/- 15 V)
     u1 = max(-15.0, min(15.0, u1))
@@ -240,6 +241,35 @@ try:
 
 except KeyboardInterrupt:
 
+    dac_buf[0] = 0x08
+    dac_buf[1] = 0
+    dac_buf[2] = 0
+
+    dac_buf[3] = 0x00
+    dac_buf[4] = 0
+    dac_buf[5] = 0
+
+    # -----------------------------------------------------
+    # Send message to DAC
+    # -----------------------------------------------------
+
+    try:
+        i2c.writeto(DAC_ADDR, dac_buf, True)
+        i2c_error_count = 0
+    except OSError:
+        i2c_error_count += 1
+        if i2c_error_count >= 10:
+            timer.deinit()
+
+    # -----------------------------------------------------
+    # Assert and de-assert active-low latch
+    #
+    # LOW  -> latch asserted
+    # HIGH -> latch released
+    # -----------------------------------------------------
+
+    latch_n.value(0)
+    latch_n.value(1)
     print("Stopping...")
 
 finally:
